@@ -17,20 +17,32 @@ exports.createProblem = async (req, res) => {
 // GET ALL (with pagination + filters)
 exports.getProblems = async (req, res) => {
   try {
-    const { page = 1, difficulty, tag, search } = req.query;
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100);
+
+    const { difficulty, tag, search } = req.query;
 
     const query = {};
-
     if (difficulty) query.difficulty = difficulty;
-    if (tag) query.tags = tag;
+    if (tag) query.tags = tag; // exact match for tag
     if (search) query.title = { $regex: search, $options: "i" };
 
-    const problems = await Problem.find(query)
-      .skip((page - 1) * 10)
-      .limit(10);
+    const skip = (page - 1) * limit;
 
-    res.json(problems);
+    const [problems, total] = await Promise.all([
+      Problem.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Problem.countDocuments(query),
+    ]);
+
+    res.json({
+      items: problems,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Error fetching problems" });
   }
 };
